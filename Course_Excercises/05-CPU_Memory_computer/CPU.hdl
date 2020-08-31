@@ -1,0 +1,46 @@
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M?
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+        Not(in=instruction[15],out=aInst);
+        Not(in=aInst,out=cInst);
+
+        And(a=cInst, b=instruction[5], out=d1); //outs d1 if it is a c instruction. if it is cinst its stored in a reg only if d1==1
+        Or(a=d1, b=aInst, out=storeInA);
+        Mux16(a=instruction, b=aluOut, sel=cInst, out=beforeA);
+
+        ARegister(in=beforeA, load=storeInA, out=A, out[0..14]=addressM);
+
+        And(a=instruction[4], b=cInst, out=d2); // d2 if its a cinst. dregister stores value only if d2 is 1
+        DRegister(in=aluOut, load=d2, out=D);
+
+        Mux16(a=A, b=inM, sel=instruction[12], out=mOrA);
+
+        ALU(x=D, y=mOrA, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=aluOut, zr=zr, ng=ng);
+        And16(a=aluOut, b=true, out=outM);
+        And(a=instruction[3], b=cInst, out=writeM);
+
+        Not(in=zr, out=notzr);
+        Not(in=ng, out=notng);
+
+        And(a=notzr, b=notng, out=pos);//if not zero or negative. means its positive.
+
+        And(a=instruction[2], b=ng, out=jneg);
+        And(a=instruction[1], b=zr, out=jzer);
+        And(a=instruction[0], b=pos, out=jpos);
+        Or(a=jneg, b=jzer, out=jzerneg);
+        Or(a=jzerneg, b=jpos, out=jumpIfCinst);
+        And(a=jumpIfCinst, b=cInst, out=jump);
+
+        PC(in=A, load=jump, inc=true, reset=reset, out[0..14]=pc);
+}
